@@ -1,0 +1,47 @@
+可插性支持
+如果说 3.0 版本新增的注解支持是为了简化 Servlet/ 过滤器 / 监听器的声明，从而使得 web.xml 变为可选配置， 那么新增的可插性 (pluggability) 支持则将 Servlet 配置的灵活性提升到了新的高度。熟悉 Struts2 的开发者都知道，Struts2 通过插件的形式提供了对包括 Spring 在内的各种开发框架的支持，开发者甚至可以自己为 Struts2 开发插件，而 Servlet 的可插性支持正是基于这样的理念而产生的。使用该特性，现在我们可以在不修改已有 Web 应用的前提下，只需将按照一定格式打成的 JAR 包放到 WEB-INF/lib 目录下，即可实现新功能的扩充，不需要额外的配置。
+Servlet 3.0 引入了称之为“Web 模块部署描述符片段”的 web-fragment.xml 部署描述文件，该文件必须存放在 JAR 文件的 META-INF 目录下，该部署描述文件可以包含一切可以在 web.xml 中定义的内容。JAR 包通常放在 WEB-INF/lib 目录下，除此之外，所有该模块使用的资源，包括 class 文件、配置文件等，只需要能够被容器的类加载器链加载的路径上，比如 classes 目录等。
+现在，为一个 Web 应用增加一个 Servlet 配置有如下三种方式 ( 过滤器、监听器与 Servlet 三者的配置都是等价的，故在此以 Servlet 配置为例进行讲述，过滤器和监听器具有与之非常类似的特性 )：
+编写一个类继承自 HttpServlet，将该类放在 classes 目录下的对应包结构中，修改 web.xml，在其中增加一个 Servlet 声明。这是最原始的方式；
+编写一个类继承自 HttpServlet，并且在该类上使用 @WebServlet 注解将该类声明为 Servlet，将该类放在 classes 目录下的对应包结构中，无需修改 web.xml 文件。
+编写一个类继承自 HttpServlet，将该类打成 JAR 包，并且在 JAR 包的 META-INF 目录下放置一个 web-fragment.xml 文件，该文件中声明了相应的 Servlet 配置。web-fragment.xml 文件示例如下：
+<?xml version="1.0" encoding="UTF-8"?>
+<web-fragment
+    xmlns=http://java.sun.com/xml/ns/javaee
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="3.0"
+    xsi:schemaLocation="http://java.sun.com/xml/ns/javaee
+    http://java.sun.com/xml/ns/javaee/web-fragment_3_0.xsd"
+    metadata-complete="true">
+    <servlet>
+        <servlet-name>fragment</servlet-name>
+        <servlet-class>footmark.servlet.FragmentServlet</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>fragment</servlet-name>
+        <url-pattern>/fragment</url-pattern>
+    </servlet-mapping>
+</web-fragment>
+从上面的示例可以看出，web-fragment.xml 与 web.xml 除了在头部声明的 XSD 引用不同之外，其主体配置与 web.xml 是完全一致的。
+由于一个 Web 应用中可以出现多个 web-fragment.xml 声明文件，加上一个 web.xml 文件，加载顺序问题便成了不得不面对的问题。Servlet 规范的专家组在设计的时候已经考虑到了这个问题，并定义了加载顺序的规则。
+web-fragment.xml 包含了两个可选的顶层标签，<name> 和 <ordering>，如果希望为当前的文件指定明确的加载顺序，通常需要使用这两个标签，<name> 主要用于标识当前的文件，而 <ordering> 则用于指定先后顺序。一个简单的示例如下：
+<web-fragment...>
+    <name>FragmentA</name>
+    <ordering>
+        <after>
+            <name>FragmentB</name>
+            <name>FragmentC</name>
+        </after>
+    <before>
+        <others/>
+    </before>
+    </ordering>
+    ...
+</web-fragment>
+如上所示， <name> 标签的取值通常是被其它 web-fragment.xml 文件在定义先后顺序时引用的，在当前文件中一般用不着，它起着标识当前文件的作用。
+在 <ordering> 标签内部，我们可以定义当前 web-fragment.xml 文件与其他文件的相对位置关系，这主要通过 <ordering> 的 <after> 和 <before> 子标签来实现的。在这两个子标签内部可以通过 <name> 标签来指定相对应的文件。比如：
+<after>
+    <name>FragmentB</name>
+    <name>FragmentC</name>
+</after>
+以上片段则表示当前文件必须在 FragmentB 和 FragmentC 之后解析。<before> 的使用于此相同，它所表示的是当前文件必须早于 <before> 标签里所列出的 web-fragment.xml 文件。
+除了将所比较的文件通过 <name> 在 <after> 和 <begin> 中列出之外，Servlet 还提供了一个简化的标签 <others/>。它表示除了当前文件之外的其他所有的 web-fragment.xml 文件。该标签的优先级要低于使用 <name> 明确指定的相对位置关系。
